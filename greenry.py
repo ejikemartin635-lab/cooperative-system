@@ -1,3 +1,9 @@
+@app.route("/")
+def home():
+    @app.route("/google52086bdcf5486b7c.html")
+    def google_verification():
+        return "google-site-verification: google52086bdcf5486b7c.html"
+
 from flask import Flask, render_template_string, request, redirect, url_for, session, send_file
 from datetime import datetime, timedelta
 import sqlite3
