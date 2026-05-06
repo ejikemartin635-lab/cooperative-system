@@ -355,8 +355,11 @@ def login():
 
         conn.close()
 
-    return render_template_string(BASE_STYLE + LOGIN_HTML, error=error)
-
+    return render_template_string("""
+<head>
+    <meta name="google-site-verification" content="<meta name="google-site-verification" content="l-xfiurJJjidapxNGy3kYxCoERc8vtlaQoAI4A3ZjyA" />" />
+</head>
+""" + BASE_STYLE + LOGIN_HTML, error=error)
 
 @app.route("/create-staff-account", methods=["GET", "POST"])
 def create_staff_account():
