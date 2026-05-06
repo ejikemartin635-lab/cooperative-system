@@ -1,9 +1,3 @@
-@app.route("/")
-def home():
-    @app.route("/google52086bdcf5486b7c.html")
-    def google_verification():
-        return "google-site-verification: google52086bdcf5486b7c.html"
-
 from flask import Flask, render_template_string, request, redirect, url_for, session, send_file
 from datetime import datetime, timedelta
 import sqlite3
@@ -19,7 +13,7 @@ DB_NAME = "cooperative.db"
 
 ADMIN_PHONE = "08000000000"
 ADMIN_PASSWORD = generate_password_hash("admin123")
-ADMIN_KEY = "supersecurekey"
+ADMIN_KEY = "GMCS123"
 CUSTOMER_PASSWORD = "12345"
 
 
@@ -313,6 +307,9 @@ def calculate_customer_total(customer_id):
     conn.close()
     return total
 
+@app.route("/google52086bdcf5486b7c.html")
+def google_verification():
+    return "google-site-verification: google52086bdcf5486b7c.html"
 
 @app.route("/")
 def home():
@@ -363,7 +360,7 @@ def login():
 
     return render_template_string("""
 <head>
-    <meta name="google-site-verification" content="<meta name="google-site-verification" content="l-xfiurJJjidapxNGy3kYxCoERc8vtlaQoAI4A3ZjyA" />" />
+    <meta name="google-site-verification" content="l-xfiurJJjidapxNGy3kYxCoERc8vtlaQoAI4A3ZjyA" />
 </head>
 """ + BASE_STYLE + LOGIN_HTML, error=error)
 
