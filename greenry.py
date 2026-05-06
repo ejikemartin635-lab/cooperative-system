@@ -6,6 +6,7 @@ import time
 import os
 import shutil
 from werkzeug.security import generate_password_hash, check_password_hash
+import requests
 
 app = Flask(__name__)
 app.secret_key = "change-this-secret-key"
@@ -15,6 +16,9 @@ ADMIN_PHONE = "08000000000"
 ADMIN_PASSWORD = generate_password_hash("admin123")
 ADMIN_KEY = "GMCS123"
 CUSTOMER_PASSWORD = "12345"
+TERMII_API_KEY = os.environ.get("TERMII_API_KEY")
+TERMII_BASE_URL = os.environ.get("TERMII_BASE_URL", "https://api.ng.termii.com")
+TERMII_SENDER_ID = os.environ.get("TERMII_SENDER_ID", "Greenery")
 
 
 def get_db():
@@ -121,6 +125,65 @@ def verify_otp(phone, otp):
         return False
     del otp_store[phone]
     return True
+def format_phone_for_termii(phone):
+    phone = phone.strip().replace(" ", "").replace("-", "")
+
+    if phone.startswith("0"):
+        return "234" + phone[1:]
+
+    if phone.startswith("+"):
+        return phone[1:]
+
+    return phone
+
+
+def send_real_otp(phone):
+    phone = format_phone_for_termii(phone)
+
+    payload = {
+        "api_key": TERMII_API_KEY,
+        "message_type": "NUMERIC",
+        "to": phone,
+        "from": TERMII_SENDER_ID,
+        "channel": "dnd",
+        "pin_attempts": 3,
+        "pin_time_to_live": 5,
+        "pin_length": 6,
+        "pin_placeholder": "< 123456 >",
+        "message_text": "Your Greenery Cooperative OTP is < 123456 >. It expires in 5 minutes.",
+        "pin_type": "NUMERIC"
+    }
+
+    response = requests.post(
+        f"{TERMII_BASE_URL}/api/sms/otp/send",
+        json=payload,
+        timeout=20
+    )
+
+    data = response.json()
+
+    if response.status_code not in [200, 201] or "pinId" not in data:
+        raise Exception(f"OTP sending failed: {data}")
+
+    return data["pinId"]
+
+
+def verify_real_otp(pin_id, otp):
+    payload = {
+        "api_key": TERMII_API_KEY,
+        "pin_id": pin_id,
+        "pin": otp
+    }
+
+    response = requests.post(
+        f"{TERMII_BASE_URL}/api/sms/otp/verify",
+        json=payload,
+        timeout=20
+    )
+
+    data = response.json()
+
+    return data.get("verified") is True or data.get("status") == "verified"
 
 
 def auto_backup():
@@ -412,9 +475,13 @@ def forgot_password():
         staff = conn.execute("SELECT * FROM staff WHERE phone = ?", (phone,)).fetchone()
         conn.close()
         if staff or phone == ADMIN_PHONE:
-            generated_otp = str(random.randint(100000, 999999))
-            save_otp(phone, generated_otp)
-            message = "OTP generated successfully. Use the OTP below to reset your password."
+            try:
+                pin_id = send_real_otp(phone)
+                session["otp_phone"] = phone
+                session["termii_pin_id"] = pin_id
+                message = "OTP sent successfully to your phone."
+            except Exception as e:
+                error = str(e)
         else:
             error = "Phone number not found."
 
@@ -437,7 +504,7 @@ def reset_password():
         otp = request.form["otp"].strip()
         new_password = request.form["new_password"].strip()
 
-        if verify_otp(phone, otp):
+        if session.get("otp_phone") == phone and verify_real_otp(session.get("termii_pin_id"), otp):
             if phone == ADMIN_PHONE:
                 error = "Admin password is protected in the code. Change ADMIN_PASSWORD manually."
             else:
@@ -500,7 +567,7 @@ def change_password():
             new_password = request.form["new_password"].strip()
             confirm_password = request.form["confirm_password"].strip()
 
-            if otp_store.get(phone) != otp:
+            if session.get("otp_phone") != phone or not verify_real_otp(session.get("termii_pin_id"), otp):
                 error = "Invalid OTP."
             elif new_password != confirm_password:
                 error = "Passwords do not match."
@@ -523,8 +590,7 @@ def change_password():
 
         {% if error %}<p style="color:red;">{{ error }}</p>{% endif %}
         {% if message %}<p style="color:green;">{{ message }}</p>{% endif %}
-        {% if generated_otp %}<h2>Your OTP: {{ generated_otp }}</h2>{% endif %}
-
+        
         <form method="POST">
             <input type="hidden" name="action" value="send_otp">
             <label>Registered Phone Number</label>
